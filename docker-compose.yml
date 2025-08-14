@@ -1,0 +1,75 @@
+version: '3.8'
+
+# * `volumes` 設定は非常に重要です。
+# ホストPCのコードをコンテナにマウントすることで、コードを変更するたびにコンテナを再ビルドすることなく、
+# リアルタイムで変更を反映させることができます。`node_modules` はコンテナ内で管理されるように除外しています。
+# * `depends_on` は、コンテナの起動順序を定義します。例えば、`backend` は `db` と `redis` が起動してから起動するように設定されています。
+
+services:
+  # PostgreSQL データベースサービス
+  db:
+    image: postgres:15-alpine # PostgreSQLのバージョン15の軽量版イメージを使用
+    container_name: chat_app_db # コンテナの名前
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB} # .envから読み込むデータベース名
+      POSTGRES_USER: ${POSTGRES_USER} # .envから読み込むデータベースユーザー名
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} # .envから読み込むデータベースパスワード
+    ports:
+      - '5432:5432' # ホストPCの5432ポートをコンテナの5432ポートにマッピング
+    volumes:
+      - db_data:/var/lib/postgresql/data # データ永続化のためのボリューム
+    restart: unless-stopped # コンテナが停止した場合、自動的に再起動
+
+  # Redis サービス
+  redis:
+    image: redis:7-alpine # Redisのバージョン7の軽量版イメージを使用
+    container_name: chat_app_redis # コンテナの名前
+    ports:
+      - '6379:6379' # ホストPCの6379ポートをコンテナの6379ポートにマッピング
+    volumes:
+      - redis_data:/data # データ永続化のためのボリューム
+    restart: unless-stopped # コンテナが停止した場合、自動的に再起動
+
+  # バックエンドサービス (Express.js)
+  # backend:
+  #   build:
+  #     context: ./chat-app-backend # chat-app-backend ディレクトリをビルドコンテキストとする
+  #     dockerfile: Dockerfile # chat-app-backend/Dockerfile を使用する
+  #   container_name: chat_app_backend
+  #   ports:
+  #     - '8000:8000' # ホストPCの8000ポートをコンテナの8000ポートにマッピング
+  #   volumes:
+  #     - ./chat-app-backend:/app # ホストのコードをコンテナにマウント (開発用: コード変更が即座に反映される)
+  #     - /app/node_modules # node_modules はホストからマウントしない (コンテナ内でインストールされるため)
+  #   environment: # .env ファイルの変数をコンテナに渡す
+  #     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public # DB接続URL
+  #     REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT} # Redis接続URL
+  #     JWT_SECRET: ${JWT_SECRET} # JWT秘密鍵
+  #     NODE_ENV: development # 開発環境であることを指定
+  #   depends_on: # db と redis サービスが起動してから backend サービスを起動する
+  #     - db
+  #     - redis
+  #   restart: unless-stopped
+  #   command: npm run dev # 開発中は nodemon で自動再起動
+
+  # フロントエンドサービス (React Vite)
+  # frontend:
+  #   build:
+  #     context: ./chat-app-frontend # chat-app-frontend ディレクトリをビルドコンテキストとする
+  #     dockerfile: Dockerfile # chat-app-frontend/Dockerfile を使用する
+  #   container_name: chat_app_frontend
+  #   ports:
+  #     - '5173:5173' # ホストPCの5173ポートをコンテナの5173ポートにマッピング
+  #   volumes:
+  #     - ./chat-app-frontend:/app # ホストのコードをコンテナにマウント (開発用: コード変更が即座に反映される)
+  #     - /app/node_modules # node_modules はホストからマウントしない (コンテナ内でインストールされるため)
+  #   environment: # .env ファイルの変数をコンテナに渡す (Vite 用に VITE_ 接頭辞を付ける)
+  #     VITE_REACT_APP_BACKEND_URL: http://backend:8000 # バックエンドのURL (Dockerネットワーク内での参照)
+  #   depends_on: # backend サービスが起動してから frontend サービスを起動する
+  #     - backend
+  #   restart: unless-stopped
+  #   command: npm run dev # 開発中は Vite 開発サーバーを起動
+
+volumes:
+  db_data: # PostgreSQLのデータ永続化ボリューム
+  redis_data: # Redisのデータ永続化ボリューム

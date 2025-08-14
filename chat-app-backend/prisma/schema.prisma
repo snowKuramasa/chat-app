@@ -1,0 +1,59 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+    // This is your Prisma schema file,
+    // learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+    generator client {
+      provider = "prisma-client-js"
+    }
+
+    datasource db {
+      provider = "postgresql"
+      url      = env("DATABASE_URL") // 環境変数からデータベースURLを取得
+    }
+
+    // ユーザー情報
+    model User {
+      id            String    @id @default(uuid()) // ユニークなID (UUID形式)
+      username      String    @unique // ユーザー名 (ユニーク)
+      passwordHash  String?   // パスワードのハッシュ (通常ユーザー用、ゲストはnull)
+      isGuest       Boolean   @default(false) // ゲストユーザーかどうか
+      profileImage  String?   // プロフィール画像のURL (任意)
+      bio           String?   // 自己紹介文 (任意)
+
+      messages      Message[] // このユーザーが送信したメッセージ
+      rooms         Room[]    // このユーザーが参加しているルーム
+      ownedRooms    Room[]    @relation("OwnedRooms") // このユーザーが作成したルーム（メモルームなど）
+    }
+
+    // チャットルーム
+    model Room {
+      id        String    @id @default(uuid())
+      name      String    // ルーム名
+      isDM      Boolean   @default(false) @map("is_dm") // DMかどうか (true: DM, false: 通常のチャットルーム)
+      isMemo    Boolean   @default(false) @map("is_memo") // メモ用ルームかどうか
+      messages  Message[] // このルームのメッセージ
+      users     User[]    // このルームに参加しているユーザー
+      owner     User?     @relation("OwnedRooms", fields: [ownerId], references: [id]) // メモルームの所有者など
+      ownerId   String?   @map("owner_id")
+
+      // DMやメモルームの一意性を確保するための複合ユニークキー
+      // 通常のチャットルームはnameのみでユニーク
+      @@unique([name, isDM, ownerId])
+      @@map("rooms") // データベース上のテーブル名を指定
+    }
+
+    // チャットメッセージ
+    model Message {
+      id        String    @id @default(uuid())
+      content   String    // メッセージ内容
+      createdAt DateTime  @default(now()) @map("created_at") // 作成日時
+      updatedAt DateTime  @updatedAt @map("updated_at") // 更新日時
+
+      user      User      @relation(fields: [userId], references: [id]) // 送信ユーザー
+      userId    String    @map("user_id")
+      room      Room      @relation(fields: [roomId], references: [id]) // 所属ルーム
+      roomId    String    @map("room_id")
+
+      @@map("messages") // データベース上のテーブル名を指定
+    }

@@ -1,0 +1,4 @@
+# .gitignore の内容例 (既にあるものに追加)
+node_modules/
+dist/
+.env
