@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express'
-import { PrismaClient, Room, User } from '@prisma/client'
+// PrismaClient, Userモデルの型、Prisma名前空間をインポートします
+// Userモデルの型は直接インポート、Roomモデルのペイロード型はPrisma名前空間から取得します
+import { PrismaClient, User, Prisma } from '@prisma/client'
 import { authenticateJWT } from '../middlewares/authMiddleware'
 import { UserPayload } from '../types/user'
 
@@ -13,9 +15,18 @@ type RoomUserDisplay = {
 
 // Prisma の findMany で include されたルームの完全な型を定義
 // Room モデルの基本フィールドに加えて、users リレーションが RoomUserDisplay の配列として付加されます。
-type RoomWithPopulatedUsers = Room & {
-  users: RoomUserDisplay[]
-}
+// Room モデルの型は Prisma.RoomGetPayload を使用して定義します。
+type RoomWithPopulatedUsers = Prisma.RoomGetPayload<{
+  include: {
+    users: {
+      select: {
+        id: true
+        username: true
+        profileImage: true
+      }
+    }
+  }
+}>
 
 const prisma = new PrismaClient()
 const roomRouter = Router()
@@ -33,7 +44,6 @@ roomRouter.get(
 
     try {
       // 1. ユーザーがメンバーとして参加している全てのルームを取得 (公開、DM、メモを含む)
-      // ここで返されるルームの型は RoomWithPopulatedUsers に合致します。
       const roomsUserIsIn: RoomWithPopulatedUsers[] =
         await prisma.room.findMany({
           where: {
@@ -49,7 +59,6 @@ roomRouter.get(
         })
 
       // 2. 参加していない全ての公開ルームを取得
-      // ここで返されるルームの型も RoomWithPopulatedUsers に合致します。
       const joinablePublicRooms: RoomWithPopulatedUsers[] =
         await prisma.room.findMany({
           where: {
@@ -67,9 +76,7 @@ roomRouter.get(
         })
 
       // 両方のリストを結合し、重複を排除
-      // Map のキーは string、値は RoomWithPopulatedUsers 型と明示します。
       const combinedRoomsMap = new Map<string, RoomWithPopulatedUsers>()
-      // forEach のコールバック引数 'room' に RoomWithPopulatedUsers 型を明示
       roomsUserIsIn.forEach((room: RoomWithPopulatedUsers) =>
         combinedRoomsMap.set(room.id, room)
       )
@@ -77,7 +84,6 @@ roomRouter.get(
         combinedRoomsMap.set(room.id, room)
       )
 
-      // allRelevantRooms の型も RoomWithPopulatedUsers の配列と明示します。
       const allRelevantRooms: RoomWithPopulatedUsers[] = Array.from(
         combinedRoomsMap.values()
       )
@@ -98,7 +104,7 @@ roomRouter.post(
   '/rooms/public',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
+    const currentUser = (req as any).user as UserPayload
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
@@ -114,7 +120,6 @@ roomRouter.post(
     }
 
     try {
-      // 公開ルームの重複チェック (name と isDM:false, ownerId:null の複合ユニーク)
       const existingRoom = await prisma.room.findFirst({
         where: {
           name: name,
@@ -161,7 +166,7 @@ roomRouter.get(
   '/users',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
+    const currentUser = (req as any).user as UserPayload
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
@@ -186,7 +191,7 @@ roomRouter.post(
   '/rooms/private',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
+    const currentUser = (req as any).user as UserPayload
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
@@ -276,7 +281,7 @@ roomRouter.get(
   '/rooms/:roomId/messages',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
+    const currentUser = (req as any).user as UserPayload
     const { roomId } = req.params
 
     if (!currentUser) {
@@ -330,7 +335,7 @@ roomRouter.post(
   '/rooms/:roomId/members',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
+    const currentUser = (req as any).user as UserPayload
     const { roomId } = req.params
     const { userIds } = req.body
 
@@ -349,6 +354,7 @@ roomRouter.post(
     }
 
     try {
+      // room の型を明示するために Prisma.RoomGetPayload を使用
       const room = await prisma.room.findFirst({
         where: {
           id: roomId,
@@ -358,7 +364,7 @@ roomRouter.post(
             },
           },
         },
-        include: { users: true }, // 既存メンバーを取得するため、ここでは完全な User 型が必要です
+        include: { users: true }, // ここでは完全な User 型が必要
       })
 
       if (!room) {
@@ -373,7 +379,7 @@ roomRouter.post(
           .json({ message: 'この種類のルームにはメンバーを追加できません。' })
       }
 
-      // map コールバックの引数 'u' に Prisma の完全な User 型を明示
+      // Userモデルの型を直接インポートした 'User' を使用
       const existingMemberIds = new Set(room.users.map((u: User) => u.id))
       const newMemberIds = userIds.filter(
         (id: string) => !existingMemberIds.has(id)
@@ -389,7 +395,6 @@ roomRouter.post(
         where: { id: { in: newMemberIds }, isGuest: false },
         select: { id: true },
       })
-      // map のコールバック引数 'user' に { id: string } 型を明示
       if (usersToAdd.length !== newMemberIds.length) {
         return res.status(400).json({
           message:
