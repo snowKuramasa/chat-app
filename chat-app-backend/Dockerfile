@@ -8,31 +8,30 @@ WORKDIR /app
 # これらはPrismaが内部的に使用するネイティブバイナリの依存関係を解決するために必要です。
 RUN apk add --no-cache openssl-dev libc6-compat postgresql-client libstdc++
 
-# ビルドキャッシュを無効化するための引数 (通常は変更不要)
+# ビルドキャッシュを無効化するための引数
+# この行は、ビルド時に指定された値が変更されるたびに、
+# このレイヤーとその後のレイヤーのキャッシュを無効化します。
 ARG CACHE_BUSTER=
 
-# package.json と package-lock.json をコピー
+# package.json と package-lock.json (または yarn.lock) をコピー
 # npm install を行う前にこれらをコピーすることで、依存関係の変更がない限りキャッシュが利用される
 COPY package*.json ./
 
-# 開発環境の依存関係もインストールするために NODE_ENV を development に設定
-# その後、npm ci を実行して package-lock.json に厳密に従い、すべての依存関係をインストール
-ENV NODE_ENV=development
-RUN npm ci
+# 依存関係をインストール
+RUN npm install
+
+# Prisma Clientを生成
+# これにより、@prisma/client が実行時に必要なファイルを作成します。
+RUN npx prisma generate
 
 # アプリケーションのソースコードをコピー
 COPY . .
 
-# ★ここから修正点★
-# TypeScript コードをビルド (明示的に NODE_ENV=development を設定)
-RUN NODE_ENV=development npm run build
-# ★修正点ここまで★
-
-# 最終的な実行環境のために NODE_ENV を production に戻す
-ENV NODE_ENV=production
+# TypeScript コードをビルド
+RUN npm run build
 
 # アプリケーションがリッスンするポートを公開
 EXPOSE 8000
 
-# コンテナ起動時に実行されるコマンド (docker-compose.yml で上書きされるが、Renderの起動コマンドと合わせる)
+# コンテナ起動時に実行されるコマンド (docker-compose.yml で上書きされる)
 CMD ["npm", "start"]
