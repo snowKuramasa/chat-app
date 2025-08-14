@@ -13,8 +13,12 @@ RUN npm install
 # アプリケーションのソースコードをコピー
 COPY . .
 
-# アプリケーションがリッスンするポートを公開
+# アプリケーションのビルド (本番デプロイ用)
+RUN npm run build
+
+# アプリケーションがリッスンするポートを公開 (Renderのデフォルトは8080ですが、環境変数PORTが使用されます)
 EXPOSE 5173
 
-# コンテナ起動時に実行されるデフォルトコマンド (docker-compose.yml で上書きされる可能性が高いです)
-CMD ["npm", "run", "dev"]
+# コンテナ起動時に実行されるコマンドを 'npm run preview' に変更
+# Renderは自動的にPORT環境変数を注入し、Viteがそれを活用するように設定
+CMD ["npm", "run", "preview"]
