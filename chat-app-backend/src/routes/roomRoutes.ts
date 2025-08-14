@@ -1,6 +1,21 @@
-import { Router, Request, Response } from 'express' // Request は express からインポート
-import { PrismaClient } from '@prisma/client'
+import { Router, Request, Response } from 'express'
+import { PrismaClient, Room, User } from '@prisma/client'
 import { authenticateJWT } from '../middlewares/authMiddleware'
+import { UserPayload } from '../types/user'
+
+// Prisma の select で取得されるユーザーの型を定義
+// findMany の include で指定している { id: true, username: true, profileImage: true } に合わせます。
+type RoomUserDisplay = {
+  id: string
+  username: string
+  profileImage: string | null
+}
+
+// Prisma の findMany で include されたルームの完全な型を定義
+// Room モデルの基本フィールドに加えて、users リレーションが RoomUserDisplay の配列として付加されます。
+type RoomWithPopulatedUsers = Room & {
+  users: RoomUserDisplay[]
+}
 
 const prisma = new PrismaClient()
 const roomRouter = Router()
@@ -10,51 +25,62 @@ roomRouter.get(
   '/rooms',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    // AuthenticatedRequest を Request に変更
-    const currentUser = (req as any).user // 型アサーションを追加
+    // req.user は express.d.ts で拡張されていることを前提とする
+    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
     if (!currentUser) {
-      // authenticateJWTで処理されるため通常は到達しない
       return res.status(401).json({ message: '認証されていません。' })
     }
 
     try {
       // 1. ユーザーがメンバーとして参加している全てのルームを取得 (公開、DM、メモを含む)
-      const roomsUserIsIn = await prisma.room.findMany({
-        where: {
-          users: {
-            some: {
-              id: currentUser.id,
+      // ここで返されるルームの型は RoomWithPopulatedUsers に合致します。
+      const roomsUserIsIn: RoomWithPopulatedUsers[] =
+        await prisma.room.findMany({
+          where: {
+            users: {
+              some: {
+                id: currentUser.id,
+              },
             },
           },
-        },
-        include: {
-          users: { select: { id: true, username: true, profileImage: true } },
-        },
-      })
+          include: {
+            users: { select: { id: true, username: true, profileImage: true } },
+          },
+        })
 
       // 2. 参加していない全ての公開ルームを取得
-      const joinablePublicRooms = await prisma.room.findMany({
-        where: {
-          isDM: false,
-          isMemo: false,
-          users: {
-            none: {
-              // ユーザーがメンバーではないルーム
-              id: currentUser.id,
+      // ここで返されるルームの型も RoomWithPopulatedUsers に合致します。
+      const joinablePublicRooms: RoomWithPopulatedUsers[] =
+        await prisma.room.findMany({
+          where: {
+            isDM: false,
+            isMemo: false,
+            users: {
+              none: {
+                id: currentUser.id,
+              },
             },
           },
-        },
-        include: {
-          users: { select: { id: true, username: true, profileImage: true } },
-        },
-      })
+          include: {
+            users: { select: { id: true, username: true, profileImage: true } },
+          },
+        })
 
       // 両方のリストを結合し、重複を排除
-      const combinedRoomsMap = new Map<string, any>()
-      roomsUserIsIn.forEach((room) => combinedRoomsMap.set(room.id, room))
-      joinablePublicRooms.forEach((room) => combinedRoomsMap.set(room.id, room))
+      // Map のキーは string、値は RoomWithPopulatedUsers 型と明示します。
+      const combinedRoomsMap = new Map<string, RoomWithPopulatedUsers>()
+      // forEach のコールバック引数 'room' に RoomWithPopulatedUsers 型を明示
+      roomsUserIsIn.forEach((room: RoomWithPopulatedUsers) =>
+        combinedRoomsMap.set(room.id, room)
+      )
+      joinablePublicRooms.forEach((room: RoomWithPopulatedUsers) =>
+        combinedRoomsMap.set(room.id, room)
+      )
 
-      const allRelevantRooms = Array.from(combinedRoomsMap.values())
+      // allRelevantRooms の型も RoomWithPopulatedUsers の配列と明示します。
+      const allRelevantRooms: RoomWithPopulatedUsers[] = Array.from(
+        combinedRoomsMap.values()
+      )
 
       // ルーム名を昇順でソート
       allRelevantRooms.sort((a, b) => a.name.localeCompare(b.name))
@@ -72,8 +98,7 @@ roomRouter.post(
   '/rooms/public',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    // AuthenticatedRequest を Request に変更
-    const currentUser = (req as any).user // 型アサーションを追加
+    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
@@ -89,12 +114,13 @@ roomRouter.post(
     }
 
     try {
-      // 公開ルームの重複チェック (name と isDM:false, isMemo:false の複合ユニーク)
+      // 公開ルームの重複チェック (name と isDM:false, ownerId:null の複合ユニーク)
       const existingRoom = await prisma.room.findFirst({
         where: {
           name: name,
           isDM: false,
-          ownerId: null, // ownerId は公開ルームでは null
+          isMemo: false,
+          ownerId: null,
         },
       })
       if (existingRoom) {
@@ -109,7 +135,7 @@ roomRouter.post(
           isDM: false,
           isMemo: false,
           users: {
-            connect: { id: currentUser.id }, // 作成者自身を参加者として追加
+            connect: { id: currentUser.id },
           },
         },
         include: {
@@ -135,16 +161,15 @@ roomRouter.get(
   '/users',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    // AuthenticatedRequest を Request に変更
-    const currentUser = (req as any).user // 型アサーションを追加
+    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
     try {
       const users = await prisma.user.findMany({
         where: {
-          id: { not: currentUser.id }, // 自分自身を除外
-          isGuest: false, // ゲストユーザーを除外
+          id: { not: currentUser.id },
+          isGuest: false,
         },
         select: { id: true, username: true, profileImage: true },
       })
@@ -161,12 +186,11 @@ roomRouter.post(
   '/rooms/private',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    // AuthenticatedRequest を Request に変更
-    const currentUser = (req as any).user // 型アサーションを追加
+    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
-    const { name, participantIds } = req.body // ルーム名と参加者IDの配列を受け取る
+    const { name, participantIds } = req.body
 
     if (!name || name.trim() === '') {
       return res.status(400).json({ message: 'ルーム名を入力してください。' })
@@ -186,17 +210,14 @@ roomRouter.post(
       })
     }
 
-    // 参加者IDリストに現在のユーザー自身が含まれていないかチェック
     if (participantIds.includes(currentUser.id)) {
       return res.status(400).json({
         message: '招待するユーザーリストに自分自身を含めることはできません。',
       })
     }
 
-    // 招待されたユーザー + 現在のユーザー
     const allParticipantIds = [...new Set([...participantIds, currentUser.id])]
 
-    // 招待されたユーザーがすべて存在し、かつゲストではないかを確認
     const invitedUsers = await prisma.user.findMany({
       where: { id: { in: participantIds }, isGuest: false },
       select: { id: true },
@@ -209,13 +230,12 @@ roomRouter.post(
     }
 
     try {
-      // プライベートチャットルーム名も一意性を確保 (isDM:true かつ isMemo:false の中で名前が一意)
       const existingPrivateRoom = await prisma.room.findFirst({
         where: {
           name: name,
           isDM: true,
-          isMemo: false, // メモルームではないことを保証
-          ownerId: null, // プライベートグループチャットはownerIdを持たない
+          isMemo: false,
+          ownerId: null,
         },
       })
       if (existingPrivateRoom) {
@@ -224,14 +244,13 @@ roomRouter.post(
         })
       }
 
-      // 新しいプライベートチャットルームを作成
       const newRoom = await prisma.room.create({
         data: {
           name: name,
-          isDM: true, // プライベートチャットを示す
+          isDM: true,
           isMemo: false,
           users: {
-            connect: allParticipantIds.map((id) => ({ id })), // 全ての参加者を接続
+            connect: allParticipantIds.map((id) => ({ id })),
           },
         },
         include: {
@@ -257,8 +276,7 @@ roomRouter.get(
   '/rooms/:roomId/messages',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    // AuthenticatedRequest を Request に変更
-    const currentUser = (req as any).user // 型アサーションを追加
+    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
     const { roomId } = req.params
 
     if (!currentUser) {
@@ -266,7 +284,6 @@ roomRouter.get(
     }
 
     try {
-      // ユーザーがそのルームのメンバーであることを確認
       const room = await prisma.room.findFirst({
         where: {
           id: roomId,
@@ -295,7 +312,7 @@ roomRouter.get(
             },
           },
         },
-        orderBy: { createdAt: 'asc' }, // 古い順に取得
+        orderBy: { createdAt: 'asc' },
       })
       console.log(
         `[Backend REST API] Fetched ${messages.length} messages for room ${roomId}.`
@@ -313,10 +330,9 @@ roomRouter.post(
   '/rooms/:roomId/members',
   authenticateJWT,
   async (req: Request, res: Response) => {
-    // AuthenticatedRequest を Request に変更
-    const currentUser = (req as any).user // 型アサーションを追加
+    const currentUser = (req as any).user as UserPayload // Request を使用するため型アサーションを維持
     const { roomId } = req.params
-    const { userIds } = req.body // 追加するユーザーIDの配列
+    const { userIds } = req.body
 
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
@@ -333,7 +349,6 @@ roomRouter.post(
     }
 
     try {
-      // 現在のユーザーがルームのメンバーであることを確認
       const room = await prisma.room.findFirst({
         where: {
           id: roomId,
@@ -343,7 +358,7 @@ roomRouter.post(
             },
           },
         },
-        include: { users: true }, // 既存メンバーを取得するため
+        include: { users: true }, // 既存メンバーを取得するため、ここでは完全な User 型が必要です
       })
 
       if (!room) {
@@ -353,13 +368,13 @@ roomRouter.post(
       }
 
       if (!room.isDM || room.isMemo) {
-        // プライベートグループチャット（isDM:true, isMemo:false）のみメンバー追加可能とする
         return res
           .status(403)
           .json({ message: 'この種類のルームにはメンバーを追加できません。' })
       }
 
-      const existingMemberIds = new Set(room.users.map((u) => u.id))
+      // map コールバックの引数 'u' に Prisma の完全な User 型を明示
+      const existingMemberIds = new Set(room.users.map((u: User) => u.id))
       const newMemberIds = userIds.filter(
         (id: string) => !existingMemberIds.has(id)
       )
@@ -370,11 +385,11 @@ roomRouter.post(
           .json({ message: '指定されたユーザーは既にルームのメンバーです。' })
       }
 
-      // 新しく追加するユーザーが存在し、ゲストではないことを確認
       const usersToAdd = await prisma.user.findMany({
         where: { id: { in: newMemberIds }, isGuest: false },
         select: { id: true },
       })
+      // map のコールバック引数 'user' に { id: string } 型を明示
       if (usersToAdd.length !== newMemberIds.length) {
         return res.status(400).json({
           message:
@@ -386,7 +401,9 @@ roomRouter.post(
         where: { id: roomId },
         data: {
           users: {
-            connect: usersToAdd.map((user) => ({ id: user.id })),
+            connect: usersToAdd.map((user: { id: string }) => ({
+              id: user.id,
+            })),
           },
         },
         include: {
