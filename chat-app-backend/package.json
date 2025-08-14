@@ -24,7 +24,8 @@
     "pg": "^8.12.0",
     "prisma": "^6.14.0",
     "redis": "^5.8.0",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.7.5",
+    "@types/redis": "^4.0.11"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
