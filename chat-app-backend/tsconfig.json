@@ -10,7 +10,7 @@
     "rootDir": "./src",
     "baseUrl": ".", // 絶対パス解決のために必要
     "typeRoots": ["./node_modules/@types", "./src/types"], // カスタム型定義の場所を追加
-    "types": ["node", "express", "jsonwebtoken"] // 明示的に含める型定義
+    "types": ["node", "express", "jsonwebtoken", "redis"] // 明示的に含める型定義に"redis"を追加
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules"]
