@@ -1,18 +1,14 @@
 {
   "compilerOptions": {
     "target": "es2020", // Compile to ES2020 JavaScript
-    "module": "commonjs", // Use CommonJS module system
+    "module": "Node16", // Changed from "commonjs" to "Node16"
     "outDir": "./dist", // Output compiled JavaScript to the 'dist' directory
     "strict": true, // Enable all strict type-checking options
     "esModuleInterop": true, // Enable interoperability between CommonJS and ES Modules
     "skipLibCheck": true, // Skip type checking of all declaration files
     "forceConsistentCasingInFileNames": true, // Disallow inconsistently-cased file names
     "rootDir": "./src", // Specify the root directory of source files
-
-    // Update moduleResolution to handle modern module resolution correctly,
-    // which helps TypeScript find type declarations for packages like Prisma.
-    // 'node16' or 'nodenext' are suitable for Node.js environments.
-    "moduleResolution": "node16" // This is the key change
+    "moduleResolution": "node16" // This is correct for Node.js environments
   },
   "include": ["src/**/*.ts"], // Include all TypeScript files in the 'src' directory
   "exclude": ["node_modules"] // Exclude the 'node_modules' directory from compilation
