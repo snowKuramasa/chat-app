@@ -27,7 +27,11 @@ const httpServer = createServer(app)
 // CORS設定
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], // フロントエンドのVite開発サーバーのURLを許可
+    origin: [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'https://chat-app-frontend-r6ra.onrender.com',
+    ], // フロントエンドのVite開発サーバーのURLを許可
     credentials: true, // クッキー、Authorizationヘッダーを許可 (JWTでは必須ではないが、将来的な拡張のために残す)
   })
 )
