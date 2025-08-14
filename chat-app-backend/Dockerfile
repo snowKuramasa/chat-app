@@ -15,7 +15,7 @@ ARG CACHE_BUSTER=
 # npm install を行う前にこれらをコピーすることで、依存関係の変更がない限りキャッシュが利用される
 COPY package*.json ./
 
-# ★ここが重要★ 開発環境の依存関係もインストールするために NODE_ENV を development に設定
+# 開発環境の依存関係もインストールするために NODE_ENV を development に設定
 # その後、npm ci を実行して package-lock.json に厳密に従い、すべての依存関係をインストール
 ENV NODE_ENV=development
 RUN npm ci
@@ -23,8 +23,10 @@ RUN npm ci
 # アプリケーションのソースコードをコピー
 COPY . .
 
-# TypeScript コードをビルド
-RUN npm run build
+# ★ここから修正点★
+# TypeScript コードをビルド (明示的に NODE_ENV=development を設定)
+RUN NODE_ENV=development npm run build
+# ★修正点ここまで★
 
 # 最終的な実行環境のために NODE_ENV を production に戻す
 ENV NODE_ENV=production
