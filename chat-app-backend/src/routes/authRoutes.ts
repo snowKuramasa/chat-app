@@ -1,12 +1,9 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response } from 'express' // Request は express からインポート
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { generateToken } from '../utils/jwt'
-import {
-  authenticateJWT,
-  AuthenticatedRequest,
-} from '../middlewares/authMiddleware'
-import { UserPayload } from '../types/user'
+import { authenticateJWT } from '../middlewares/authMiddleware'
+import { UserPayload } from '../types/user' // UserPayload 型をインポート
 
 const prisma = new PrismaClient()
 const authRouter = Router()
@@ -104,34 +101,30 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 })
 
 // ログアウトエンドポイント (JWTベースなのでクライアント側でトークンを削除するだけでOKだが、サーバー側でもトークンを無効化する処理を入れる場合はここに追加)
-authRouter.post(
-  '/logout',
-  authenticateJWT,
-  (req: AuthenticatedRequest, res: Response) => {
-    // ここでJWTのブラックリスト化を行う場合、Redisなどにトークンを保存して無効化する
-    // 例: await redisClient.set(`blacklisted:${req.user.id}:${req.token}`, 'true', 'EX', jwt_expiration_time_in_seconds);
-    res.status(200).json({ message: 'ログアウトしました。' })
-  }
-)
+authRouter.post('/logout', authenticateJWT, (req: Request, res: Response) => {
+  // AuthenticatedRequest を Request に変更
+  // ここでJWTのブラックリスト化を行う場合、Redisなどにトークンを保存して無効化する
+  // 例: await redisClient.set(`blacklisted:${req.user.id}:${req.token}`, 'true', 'EX', jwt_expiration_time_in_seconds);
+  res.status(200).json({ message: 'ログアウトしました。' })
+})
 
 // 認証済みのユーザー情報を取得
-authRouter.get(
-  '/me',
-  authenticateJWT,
-  (req: AuthenticatedRequest, res: Response) => {
-    if (req.user) {
-      return res.status(200).json(req.user)
-    }
-    res.status(401).json({ message: '認証されていません。' }) // authenticateJWTで処理されるため、通常ここには到達しない
+authRouter.get('/me', authenticateJWT, (req: Request, res: Response) => {
+  // AuthenticatedRequest を Request に変更
+  if ((req as any).user) {
+    // 型アサーションを追加
+    return res.status(200).json((req as any).user) // 型アサーションを追加
   }
-)
+  res.status(401).json({ message: '認証されていません。' }) // authenticateJWTで処理されるため、通常ここには到達しない
+})
 
 // プロフィール設定更新エンドポイント (初期フェーズではユーザー名のみ)
 authRouter.put(
   '/profile',
   authenticateJWT,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const currentUser = req.user
+  async (req: Request, res: Response) => {
+    // AuthenticatedRequest を Request に変更
+    const currentUser = (req as any).user // 型アサーションを追加
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }

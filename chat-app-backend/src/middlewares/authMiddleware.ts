@@ -1,11 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { verifyToken } from '../utils/jwt'
-import { UserPayload } from '../types/user'
-
-// 認証済みリクエストの型定義
-export interface AuthenticatedRequest extends Request {
-  user?: UserPayload // JWTからデコードされたユーザー情報
-}
+import { UserPayload } from '../types/user' // UserPayloadをインポート
 
 // JWT認証ミドルウェア
 export const authenticateJWT = (
@@ -21,7 +16,9 @@ export const authenticateJWT = (
     const decodedUser = verifyToken(token)
     if (decodedUser) {
       // トークンが有効であればユーザー情報をリクエストオブジェクトに追加
-      ;(req as AuthenticatedRequest).user = decodedUser
+      // req.user は src/types/express.d.ts で拡張されているため、安全に代入できます。
+      // ただし、型チェッカーが厳しいため、UserPayload に型アサーションします。
+      ;(req as any).user = decodedUser // 汎用的な Request 型に user プロパティを追加
       next()
     } else {
       // トークンが無効または期限切れ

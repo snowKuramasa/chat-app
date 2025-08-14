@@ -1,9 +1,6 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response } from 'express' // Request は express からインポート
 import { PrismaClient } from '@prisma/client'
-import {
-  authenticateJWT,
-  AuthenticatedRequest,
-} from '../middlewares/authMiddleware'
+import { authenticateJWT } from '../middlewares/authMiddleware'
 
 const prisma = new PrismaClient()
 const roomRouter = Router()
@@ -12,8 +9,9 @@ const roomRouter = Router()
 roomRouter.get(
   '/rooms',
   authenticateJWT,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const currentUser = req.user
+  async (req: Request, res: Response) => {
+    // AuthenticatedRequest を Request に変更
+    const currentUser = (req as any).user // 型アサーションを追加
     if (!currentUser) {
       // authenticateJWTで処理されるため通常は到達しない
       return res.status(401).json({ message: '認証されていません。' })
@@ -73,8 +71,9 @@ roomRouter.get(
 roomRouter.post(
   '/rooms/public',
   authenticateJWT,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const currentUser = req.user
+  async (req: Request, res: Response) => {
+    // AuthenticatedRequest を Request に変更
+    const currentUser = (req as any).user // 型アサーションを追加
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
@@ -84,11 +83,9 @@ roomRouter.post(
       return res.status(400).json({ message: 'ルーム名を入力してください。' })
     }
     if (currentUser.isGuest) {
-      return res
-        .status(403)
-        .json({
-          message: 'ゲストユーザーは公開チャットルームを作成できません。',
-        })
+      return res.status(403).json({
+        message: 'ゲストユーザーは公開チャットルームを作成できません。',
+      })
     }
 
     try {
@@ -119,20 +116,16 @@ roomRouter.post(
           users: { select: { id: true, username: true, profileImage: true } },
         },
       })
-      res
-        .status(201)
-        .json({
-          message: '公開チャットルームが作成されました。',
-          room: newRoom,
-        })
+      res.status(201).json({
+        message: '公開チャットルームが作成されました。',
+        room: newRoom,
+      })
     } catch (error: any) {
       console.error('公開チャットルーム作成エラー:', error)
-      res
-        .status(500)
-        .json({
-          message: '公開チャットルームの作成に失敗しました。',
-          error: error.message,
-        })
+      res.status(500).json({
+        message: '公開チャットルームの作成に失敗しました。',
+        error: error.message,
+      })
     }
   }
 )
@@ -141,8 +134,9 @@ roomRouter.post(
 roomRouter.get(
   '/users',
   authenticateJWT,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const currentUser = req.user
+  async (req: Request, res: Response) => {
+    // AuthenticatedRequest を Request に変更
+    const currentUser = (req as any).user // 型アサーションを追加
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
@@ -166,8 +160,9 @@ roomRouter.get(
 roomRouter.post(
   '/rooms/private',
   authenticateJWT,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const currentUser = req.user
+  async (req: Request, res: Response) => {
+    // AuthenticatedRequest を Request に変更
+    const currentUser = (req as any).user // 型アサーションを追加
     if (!currentUser) {
       return res.status(401).json({ message: '認証されていません。' })
     }
@@ -186,21 +181,16 @@ roomRouter.post(
         .json({ message: '招待するユーザーを選択してください。' })
     }
     if (currentUser.isGuest) {
-      return res
-        .status(403)
-        .json({
-          message:
-            'ゲストユーザーはプライベートチャットルームを作成できません。',
-        })
+      return res.status(403).json({
+        message: 'ゲストユーザーはプライベートチャットルームを作成できません。',
+      })
     }
 
     // 参加者IDリストに現在のユーザー自身が含まれていないかチェック
     if (participantIds.includes(currentUser.id)) {
-      return res
-        .status(400)
-        .json({
-          message: '招待するユーザーリストに自分自身を含めることはできません。',
-        })
+      return res.status(400).json({
+        message: '招待するユーザーリストに自分自身を含めることはできません。',
+      })
     }
 
     // 招待されたユーザー + 現在のユーザー
@@ -212,12 +202,10 @@ roomRouter.post(
       select: { id: true },
     })
     if (invitedUsers.length !== participantIds.length) {
-      return res
-        .status(400)
-        .json({
-          message:
-            '無効なユーザーIDが含まれているか、ゲストユーザーが招待されています。',
-        })
+      return res.status(400).json({
+        message:
+          '無効なユーザーIDが含まれているか、ゲストユーザーが招待されています。',
+      })
     }
 
     try {
@@ -231,11 +219,9 @@ roomRouter.post(
         },
       })
       if (existingPrivateRoom) {
-        return res
-          .status(409)
-          .json({
-            message: 'このプライベートチャットルーム名は既に存在します。',
-          })
+        return res.status(409).json({
+          message: 'このプライベートチャットルーム名は既に存在します。',
+        })
       }
 
       // 新しいプライベートチャットルームを作成
@@ -252,20 +238,16 @@ roomRouter.post(
           users: { select: { id: true, username: true, profileImage: true } },
         },
       })
-      res
-        .status(201)
-        .json({
-          message: '新しいプライベートチャットルームを作成しました。',
-          room: newRoom,
-        })
+      res.status(201).json({
+        message: '新しいプライベートチャットルームを作成しました。',
+        room: newRoom,
+      })
     } catch (error: any) {
       console.error('プライベートチャットルーム作成エラー:', error)
-      res
-        .status(500)
-        .json({
-          message: 'プライベートチャットルームの作成に失敗しました。',
-          error: error.message,
-        })
+      res.status(500).json({
+        message: 'プライベートチャットルームの作成に失敗しました。',
+        error: error.message,
+      })
     }
   }
 )
@@ -274,8 +256,9 @@ roomRouter.post(
 roomRouter.get(
   '/rooms/:roomId/messages',
   authenticateJWT,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const currentUser = req.user
+  async (req: Request, res: Response) => {
+    // AuthenticatedRequest を Request に変更
+    const currentUser = (req as any).user // 型アサーションを追加
     const { roomId } = req.params
 
     if (!currentUser) {
@@ -329,8 +312,9 @@ roomRouter.get(
 roomRouter.post(
   '/rooms/:roomId/members',
   authenticateJWT,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const currentUser = req.user
+  async (req: Request, res: Response) => {
+    // AuthenticatedRequest を Request に変更
+    const currentUser = (req as any).user // 型アサーションを追加
     const { roomId } = req.params
     const { userIds } = req.body // 追加するユーザーIDの配列
 
@@ -392,12 +376,10 @@ roomRouter.post(
         select: { id: true },
       })
       if (usersToAdd.length !== newMemberIds.length) {
-        return res
-          .status(400)
-          .json({
-            message:
-              '無効なユーザーIDが含まれているか、ゲストユーザーが招待されています。',
-          })
+        return res.status(400).json({
+          message:
+            '無効なユーザーIDが含まれているか、ゲストユーザーが招待されています。',
+        })
       }
 
       const updatedRoom = await prisma.room.update({
@@ -417,12 +399,10 @@ roomRouter.post(
         .json({ message: 'メンバーが追加されました。', room: updatedRoom })
     } catch (error: any) {
       console.error('メンバー追加エラー:', error)
-      res
-        .status(500)
-        .json({
-          message: 'メンバーの追加に失敗しました。',
-          error: error.message,
-        })
+      res.status(500).json({
+        message: 'メンバーの追加に失敗しました。',
+        error: error.message,
+      })
     }
   }
 )
