@@ -17,15 +17,16 @@ ARG CACHE_BUSTER=
 # npm install を行う前にこれらをコピーすることで、依存関係の変更がない限りキャッシュが利用される
 COPY package*.json ./
 
+# ★ここが変更点: アプリケーションのソースコード全体をnpm install後にコピーします★
+# これにより、prisma/schema.prisma が prisma generate 実行時にコンテナ内に存在することを保証します。
+COPY . .
+
 # 依存関係をインストール
 RUN npm install
 
 # Prisma Clientを生成
 # これにより、@prisma/client が実行時に必要なファイルを作成します。
 RUN npx prisma generate
-
-# アプリケーションのソースコードをコピー
-COPY . .
 
 # TypeScript コードをビルド
 RUN npm run build
